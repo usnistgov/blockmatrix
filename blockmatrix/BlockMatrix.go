@@ -11,29 +11,49 @@ import (
 )
 // https://csrc.nist.gov/publications/detail/white-paper/2018/05/31/data-structure-for-integrity-protection-with-erasure-capability/draft
 
+/*
+
+The draft version of the NIST paper used null for diagonal values
+But I used random data in diagonal cells
+
+The draft version of the NIST paper did not have hash of rows and hash of columns
+I added them for extra security
+
+Also, the draft version did not have a hash of matrix
+I added it to store the hash of random data in diagonal cells
+
+*/
+
 type BlockMatrix struct {
 
-  Dimension int
-  HashAlgorithm string
-  BlockData [][]bytes.Buffer
-  BlockHashes [][]string
-  RowHashes []string
-  HashOfRows string
-  ColumnHashes []string
-  HashOfColumns string
-  HashOfMatrix string
+  Dimension int                // N x N matrix
+  HashAlgorithm string         // Hash algorithm to use for the matrix
+  BlockData [][]bytes.Buffer   // Block data
+  BlockHashes [][]string       // Hash of block data
+  RowHashes []string           // Row hashes
+  HashOfRows string            // Hash of all row hashes
+  ColumnHashes []string        // Column hashes
+  HashOfColumns string         // Hash of all column hashes
+  HashOfMatrix string          // Hash of diagonal elements
 }
 
+// Developers can use this variable to trace program execution
 var TraceEnabled bool = false
 
 const (
 
+  // Hash algorithms to be used in hashing data
   Sha256 = "SHA256"
   Sha384 = "SHA384"
   Sha512 = "SHA512"
 
+  // Diagonal cells are filled with random data, this is the length of random blocks
   RandomBlockLength = 64
 )
+
+// Create a BlockMatrix data structure and set its dimension and hash algorithm
+// Allocate arrays in the BlockMatrix
+// Fill diagonal cells with random data
 
 func Create( Dimension int, HashAlgorithm string ) *BlockMatrix {
 
@@ -48,15 +68,18 @@ func Create( Dimension int, HashAlgorithm string ) *BlockMatrix {
   bm.BlockHashes = make([][]string, Dimension)
   for i := 0; i < Dimension; i++ { bm.BlockHashes[i] = make([]string, Dimension) }
 
-  bm.RowHashes  = make([]string, Dimension)
-  bm.ColumnHashes  = make([]string, Dimension)
+  bm.RowHashes = make([]string, Dimension)
+  bm.ColumnHashes = make([]string, Dimension)
 
   bm.fillDiagonalWithRandomData()
+  bm.updateHashOfMatrix()
 
   if TraceEnabled { log.Printf("Create() returning %v\n", &bm) }
 
   return bm
 }
+
+// an internal function to compute the hash of a stream of bytes
 
 func (bm *BlockMatrix) hashOfBytes( Data bytes.Buffer ) string {
 
@@ -78,6 +101,8 @@ func (bm *BlockMatrix) hashOfBytes( Data bytes.Buffer ) string {
   return HashStr
 }
 
+// an internal function to compute the hash of a given string
+
 func (bm *BlockMatrix) hashOfString( DataStr string ) string {
 
   var HashStr string
@@ -98,6 +123,9 @@ func (bm *BlockMatrix) hashOfString( DataStr string ) string {
   return HashStr
 }
 
+// an internal function to compute/update the hash of all rows's hashes
+// Each row's hash is concatenated and the resulting string is hashed
+
 func (bm *BlockMatrix) updateHashOfRows() {
 
   var Hashes string
@@ -111,6 +139,9 @@ func (bm *BlockMatrix) updateHashOfRows() {
   bm.HashOfRows = bm.hashOfString(Hashes)
 }
 
+// an internal function to compute/update the hash of all column's hashes
+// Each column's hash is concatenated and the resulting string is hashed
+
 func (bm *BlockMatrix) updateHashOfColumns() {
 
   var Hashes string
@@ -123,6 +154,11 @@ func (bm *BlockMatrix) updateHashOfColumns() {
 
   bm.HashOfColumns = bm.hashOfString(Hashes)
 }
+
+// an internal function to compute/update row hashes
+// From and To specify the range to update
+// If you want to update row 3's hash, then use From = 3 and To = 4
+// Diagonal elements (i = j) are excluded in hash computation
 
 func (bm *BlockMatrix) updateRowHashes( From int, To int ) {
 
@@ -144,6 +180,11 @@ func (bm *BlockMatrix) updateRowHashes( From int, To int ) {
   bm.updateHashOfRows()
 }
 
+// an internal function to compute/update column hashes
+// From and To specify the range to update
+// If you want to update column 3's hash, then use From = 3 and To = 4
+// Diagonal elements (i = j) are excluded in hash computation
+
 func (bm *BlockMatrix) updateColumnHashes( From int, To int ) {
 
   if TraceEnabled { log.Printf("updateColumnHashes(%d, %d) called\n", From, To) }
@@ -164,6 +205,10 @@ func (bm *BlockMatrix) updateColumnHashes( From int, To int ) {
   bm.updateHashOfColumns()
 }
 
+// an internal function to update the hash of matrix
+// It concatenates the hashes of random data in diagonal cells and hashes the result
+// It's also a unique identifier of each block matrix
+
 func (bm *BlockMatrix) updateHashOfMatrix() {
 
   var Hashes string
@@ -182,6 +227,10 @@ func (bm *BlockMatrix) updateHashOfMatrix() {
 
   bm.HashOfMatrix = bm.hashOfString(Hashes)
 }
+
+// an internal function to fill diagonal cells with random data
+// Each random data block has a fixed length of RandomBlockLength bytes
+// If there is a problem in rand.Read(), then error is returned to the caller
 
 func (bm *BlockMatrix) fillDiagonalWithRandomData() error {
 
@@ -206,7 +255,10 @@ func (bm *BlockMatrix) fillDiagonalWithRandomData() error {
   return nil
 }
 
-func (bm *BlockMatrix) InsertBlocks( Blocks []bytes.Buffer ) error {
+// Insert N * N - N blocks into the block matrix
+// Since diagonal cells are filled with random data we have N * N - N available blocks
+
+func (bm *BlockMatrix) InsertBlocks( Blocks []bytes.Buffer ) {
 
   var i, j int
 
@@ -237,15 +289,14 @@ func (bm *BlockMatrix) InsertBlocks( Blocks []bytes.Buffer ) error {
     }
   }
 
-  err := bm.fillDiagonalWithRandomData()
-  if err != nil { return err }
-
   bm.updateRowHashes(0, bm.Dimension)
   bm.updateColumnHashes(0, bm.Dimension)
   bm.updateHashOfMatrix()
-
-  return nil
 }
+
+// an internal function to return row and column number of a given block
+// The block matrix is filled with an array of blocks
+// This function maps blocks to matrix coordinates
 
 func (bm *BlockMatrix) blockIndex( BlockNumber int ) (i, j int) {
 
@@ -283,6 +334,9 @@ func (bm *BlockMatrix) blockIndex( BlockNumber int ) (i, j int) {
   return i, j
 }
 
+// Given a block number, its data is returned
+// If there is no such block, an empty block is returned to the caller
+
 func (bm *BlockMatrix) GetBlockData( BlockNumber int ) bytes.Buffer {
 
   if TraceEnabled { log.Printf("GetBlockData(%d) called\n", BlockNumber) }
@@ -302,6 +356,9 @@ func (bm *BlockMatrix) GetBlockData( BlockNumber int ) bytes.Buffer {
   return bm.BlockData[i][j]
 }
 
+// Given a block number, its hash string is returned
+// If there is no such block, an empty string is returned to the caller
+
 func (bm *BlockMatrix) GetBlockHash( BlockNumber int ) string {
 
   if TraceEnabled { log.Printf("GetBlockHash(%d) called\n", BlockNumber) }
@@ -318,25 +375,34 @@ func (bm *BlockMatrix) GetBlockHash( BlockNumber int ) string {
   return bm.BlockHashes[i][j]
 }
 
+// returns the hash of a given row
+
 func (bm *BlockMatrix) GetRowHash( RowNumber int ) string {
 
   return bm.RowHashes[RowNumber]
 }
+
+// returns the hash of a given column
 
 func (bm *BlockMatrix) GetColHash( ColNumber int ) string {
 
   return bm.ColumnHashes[ColNumber]
 }
 
+// returns the hash of all columns
+
 func (bm *BlockMatrix) GetHashOfColumns() string {
 
   return bm.HashOfColumns
 }
 
+// returns the has of all rows
 func (bm *BlockMatrix) GetHashOfRows() string {
 
   return bm.HashOfRows
 }
+
+// GPDR complaint block deletion using block number
 
 func (bm *BlockMatrix) DeleteBlock( BlockNumber int ) bool {
 
@@ -354,6 +420,10 @@ func (bm *BlockMatrix) DeleteBlock( BlockNumber int ) bool {
   return bm.deleteBlockAt(i, j)
 }
 
+// GPDR complaint block deletion using row and column numbers
+// Block data is reset and its hash is set to empty string
+// Affected row and column hashes are updated
+
 func (bm *BlockMatrix) deleteBlockAt( RowNumber int, ColNumber int ) bool {
 
   if RowNumber < 0 || ColNumber < 0 || RowNumber > bm.Dimension || ColNumber > bm.Dimension {
@@ -370,6 +440,9 @@ func (bm *BlockMatrix) deleteBlockAt( RowNumber int, ColNumber int ) bool {
 
   return true
 }
+
+// Dumps a block matrix, usefull for debugging
+// Only the first MaxChars bytes of hashes are printed
 
 func (bm *BlockMatrix) Dump( MaxChars int ) {
 
