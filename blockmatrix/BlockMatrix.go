@@ -8,6 +8,7 @@ import (
   "crypto/sha256"
   "crypto/sha512"
   "crypto/rand"
+  "sync"
 )
 // https://csrc.nist.gov/publications/detail/white-paper/2018/05/31/data-structure-for-integrity-protection-with-erasure-capability/draft
 
@@ -35,6 +36,8 @@ type BlockMatrix struct {
   ColumnHashes []string        // Column hashes
   HashOfColumns string         // Hash of all column hashes
   HashOfMatrix string          // Hash of diagonal elements
+  RowLocks []sync.RWMutex      // Read-Write locks for rows
+  ColumnLocks []sync.RWMutex   // Read-Write locks for columns
 }
 
 // Developers can use this variable to trace program execution
@@ -62,6 +65,7 @@ func Create( Dimension int, HashAlgorithm string ) *BlockMatrix {
   bm := new(BlockMatrix)
   bm.Dimension = Dimension
   bm.HashAlgorithm = HashAlgorithm
+
   bm.BlockData = make([][]bytes.Buffer, Dimension)
   for i := 0; i < Dimension; i++ { bm.BlockData[i] = make([]bytes.Buffer, Dimension) }
 
@@ -70,6 +74,9 @@ func Create( Dimension int, HashAlgorithm string ) *BlockMatrix {
 
   bm.RowHashes = make([]string, Dimension)
   bm.ColumnHashes = make([]string, Dimension)
+
+  bm.RowLocks = make([]sync.RWMutex, Dimension)
+  bm.ColumnLocks = make([]sync.RWMutex, Dimension)
 
   bm.fillDiagonalWithRandomData()
   bm.updateHashOfMatrix()
@@ -214,15 +221,9 @@ func (bm *BlockMatrix) updateHashOfMatrix() {
   var Hashes string
 
   Hashes = ""
-  for i := 0; i < bm.Dimension; i++ {
+  for k := 0; k < bm.Dimension; k++ {
 
-    for j := 0; j < bm.Dimension; j++ {
-
-      if i == j {
-
-        Hashes += bm.BlockHashes[i][j]
-      }
-    }
+    Hashes += bm.BlockHashes[k][k]
   }
 
   bm.HashOfMatrix = bm.hashOfString(Hashes)
@@ -236,20 +237,13 @@ func (bm *BlockMatrix) fillDiagonalWithRandomData() error {
 
   RandomData := make([]byte, RandomBlockLength)
 
-  for i := 0; i < bm.Dimension; i++ {
+  for k := 0; k < bm.Dimension; k++ {
 
-    for j := 0; j < bm.Dimension; j++ {
+    _, err := rand.Read(RandomData)
+    if err != nil { return err }
 
-      if i == j {
-
-        _, err := rand.Read(RandomData)
-        if err != nil { return err }
-
-        bm.BlockData[i][j].Write(RandomData)
-        bm.BlockHashes[i][j] = bm.hashOfBytes(bm.BlockData[i][j])
-
-      }
-    }
+    bm.BlockData[k][k].Write(RandomData)
+    bm.BlockHashes[k][k] = bm.hashOfBytes(bm.BlockData[k][k])
   }
 
   return nil
@@ -402,7 +396,7 @@ func (bm *BlockMatrix) GetHashOfRows() string {
   return bm.HashOfRows
 }
 
-// GPDR complaint block deletion using block number
+// GPDR compliant block deletion using block number
 
 func (bm *BlockMatrix) DeleteBlock( BlockNumber int ) bool {
 
@@ -420,7 +414,7 @@ func (bm *BlockMatrix) DeleteBlock( BlockNumber int ) bool {
   return bm.deleteBlockAt(i, j)
 }
 
-// GPDR complaint block deletion using row and column numbers
+// GPDR compliant block deletion using row and column numbers
 // Block data is reset and its hash is set to empty string
 // Affected row and column hashes are updated
 
@@ -437,6 +431,8 @@ func (bm *BlockMatrix) deleteBlockAt( RowNumber int, ColNumber int ) bool {
   bm.BlockHashes[RowNumber][ColNumber] = ""
   bm.updateRowHashes(RowNumber, RowNumber + 1)
   bm.updateColumnHashes(ColNumber, ColNumber + 1)
+
+  if TraceEnabled { log.Printf("deleteBlockAt(%d, %d) successful\n", RowNumber, ColNumber) }
 
   return true
 }
@@ -475,11 +471,124 @@ func (bm *BlockMatrix) Dump( MaxChars int ) {
     }
   }
 
-  for i := 0; i < bm.Dimension; i++ { fmt.Printf("RowHashes[%d]: %s\n", i, bm.RowHashes[i][0:MaxChars]) }
+  for i := 0; i < bm.Dimension; i++ {
 
-  for j := 0; j < bm.Dimension; j++ { fmt.Printf("ColumnHashes[%d]: %s\n", j, bm.ColumnHashes[j][0:MaxChars]) }
+    if bm.RowHashes[i] != "" { fmt.Printf("RowHashes[%d]: %s\n", i, bm.RowHashes[i][0:MaxChars]) }
+  }
 
-  fmt.Printf("HashOfRows   : %s\n", bm.HashOfRows[0:MaxChars])
-  fmt.Printf("HashOfColumns: %s\n", bm.HashOfColumns[0:MaxChars])
-  fmt.Printf("HashOfMatrix : %s\n", bm.HashOfMatrix[0:MaxChars])
+  for j := 0; j < bm.Dimension; j++ {
+
+    if bm.ColumnHashes[j] != "" { fmt.Printf("ColumnHashes[%d]: %s\n", j, bm.ColumnHashes[j][0:MaxChars]) }
+  }
+
+  if bm.HashOfRows != "" { fmt.Printf("HashOfRows   : %s\n", bm.HashOfRows[0:MaxChars]) }
+  if bm.HashOfColumns != "" { fmt.Printf("HashOfColumns: %s\n", bm.HashOfColumns[0:MaxChars]) }
+  if bm.HashOfMatrix != "" { fmt.Printf("HashOfMatrix : %s\n", bm.HashOfMatrix[0:MaxChars]) }
+}
+
+// internal function to Write Lock for a block modification
+// since diagonal elements are not included in row and column hashes, it is possible to update rows and columns simultaneously
+// but we should prevent 2 or more modifications to the same row and column
+// a read-write lock is used for synchronization purposes
+// this function locks the row first, then column
+// using this function prevents deadlocks since the order of locks is always row first, then column
+
+func (bm *BlockMatrix) writeLockBlock( BlockNumber int ) bool {
+
+  i, j := bm.blockIndex(BlockNumber)
+
+  return bm.writeLockBlockAt(i, j)
+}
+
+func (bm *BlockMatrix) writeLockBlockAt( RowNumber int, ColNumber int ) bool {
+
+  if RowNumber < 0 || ColNumber < 0 || RowNumber > bm.Dimension || ColNumber > bm.Dimension {
+
+    if TraceEnabled { log.Printf("writeLockBlockAt() invalid RowNumber %d or ColNumber %d\n", RowNumber, ColNumber) }
+
+    return false
+  }
+
+  // write lock on row first
+  bm.RowLocks[RowNumber].Lock()
+
+  // then write lock on column
+  bm.ColumnLocks[ColNumber].Lock()
+
+  return true
+}
+
+func (bm *BlockMatrix) writeUnlockBlock( BlockNumber int ) bool {
+
+  i, j := bm.blockIndex(BlockNumber)
+
+  return bm.writeUnlockBlockAt(i, j)
+}
+
+func (bm *BlockMatrix) writeUnlockBlockAt( RowNumber int, ColNumber int ) bool {
+
+  if RowNumber < 0 || ColNumber < 0 || RowNumber > bm.Dimension || ColNumber > bm.Dimension {
+
+    if TraceEnabled { log.Printf("writeUnlockBlockAt() invalid RowNumber %d or ColNumber %d\n", RowNumber, ColNumber) }
+
+    return false
+  }
+
+  // unlock column first
+  bm.ColumnLocks[ColNumber].Unlock()
+
+  // then unlock row
+  bm.RowLocks[RowNumber].Unlock()
+
+  return true
+}
+
+func (bm *BlockMatrix) readLockBlock( BlockNumber int ) bool {
+
+  i, j := bm.blockIndex(BlockNumber)
+
+  return bm.readLockBlockAt(i, j)
+}
+
+func (bm *BlockMatrix) readLockBlockAt( RowNumber int, ColNumber int ) bool {
+
+  if RowNumber < 0 || ColNumber < 0 || RowNumber > bm.Dimension || ColNumber > bm.Dimension {
+
+    if TraceEnabled { log.Printf("readLockBlockAt() invalid RowNumber %d or ColNumber %d\n", RowNumber, ColNumber) }
+
+    return false
+  }
+
+  // read lock on row first
+  bm.RowLocks[RowNumber].RLock()
+
+  // then read lock on column
+  bm.ColumnLocks[ColNumber].RLock()
+
+  return true
+}
+
+func (bm *BlockMatrix) readUnlockBlock( BlockNumber int ) bool {
+
+  i, j := bm.blockIndex(BlockNumber)
+
+  return bm.readUnlockBlockAt(i, j)
+}
+
+func (bm *BlockMatrix) readUnlockBlockAt( RowNumber int, ColNumber int ) bool {
+
+  if RowNumber < 0 || ColNumber < 0 || RowNumber > bm.Dimension || ColNumber > bm.Dimension {
+
+    if TraceEnabled { log.Printf("readUnlockBlockAt() invalid RowNumber %d or ColNumber %d\n", RowNumber, ColNumber) }
+
+    return false
+  }
+
+  // unlock column first
+  bm.ColumnLocks[ColNumber].RUnlock()
+
+  // then unlock row
+  bm.RowLocks[RowNumber].RUnlock()
+
+  return true
 }
