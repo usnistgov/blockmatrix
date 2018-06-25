@@ -378,7 +378,7 @@ func (bm *BlockMatrix) GetRowHash( RowNumber int ) string {
 
 // returns the hash of a given column
 
-func (bm *BlockMatrix) GetColHash( ColNumber int ) string {
+func (bm *BlockMatrix) GetColumnHash( ColNumber int ) string {
 
   return bm.ColumnHashes[ColNumber]
 }
@@ -390,10 +390,16 @@ func (bm *BlockMatrix) GetHashOfColumns() string {
   return bm.HashOfColumns
 }
 
-// returns the has of all rows
+// returns the hash of all rows
 func (bm *BlockMatrix) GetHashOfRows() string {
 
   return bm.HashOfRows
+}
+
+// returns the hash of matrix
+func (bm *BlockMatrix) GetHashOfMatrix() string {
+
+  return bm.HashOfMatrix
 }
 
 // GPDR compliant block deletion using block number
