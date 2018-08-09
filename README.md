@@ -1,6 +1,9 @@
 # blockmatrix
 This project is developing code to implement features and extensions to the NIST Cybersecurity Whitepaper, "A Data Structure for Integrity Protection with Erasure Capability". The block matrix data structure may have utility for incorporation into applications requiring integrity protection that currently use permissioned blockchains. This capability could for example be useful in meeting privacy requirements such as the European Union General Data Protection Regulation (GDPR), which requires that organizations make it possible to delete all information related to a particular individual, at that person's request. 
 
+# In This Repo 
+This repo consists of 2 main parts: A Block Matrix Data Structure written in Go, and a Java package which uses a Block Matrix to implement a blockchain. The two parts are both based off the block matrices descirbed in the NIST Whitepaper, but are otherwise completely unrelated. The source code for the blockmatrix blockchain package is in the blockmatrixChain folder. A presentation explaining the block matrix blockchain package, along with a manual explaining how to use it and the concept in more detail, is included in the docs subfolder of the blockmatrixChain folder. The Go Block Matrix Data Structure is described in the rest of this README. 
+
 # Block Matrix Data Structure
 In addition to the specifications in the draft version of NIST Cybersecurity Whitepaper, "A Data Structure for Integrity Protection with Erasure Capability", the following changes are introduced:<br>
 * Diagonal elements contain random data instead of empty blocks (**fillDiagonalWithRandomData() function**)
