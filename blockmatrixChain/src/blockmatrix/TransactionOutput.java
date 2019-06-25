@@ -18,7 +18,7 @@ public class TransactionOutput {
 
     //Check if coin belongs to you
     boolean isMine(PublicKey publicKey) {
-        return (publicKey == recipient);
+        return (publicKey.equals(recipient));
     }
 
     public String getId() {
