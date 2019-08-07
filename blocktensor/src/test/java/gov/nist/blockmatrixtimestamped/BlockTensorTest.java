@@ -69,34 +69,49 @@ public class BlockTensorTest {
     @Test
     // takes around 7 minutes to run with width = 1000
     public void testPerformance() {
-        int width = 200;
+        int width = 250;
 
         warmUp();
 
         long start;
 
+        long blocktensorTotal = 0;
+        long blockmatrixTotal = 0;
+
         start = System.nanoTime();
         BlockMatrix bm = new BlockMatrix(width);
-        System.out.println("Blockmatrix init: " + (System.nanoTime() - start) / 1000000);
+        long bmInit = (System.nanoTime() - start) / 1000000;
+        blockmatrixTotal += bmInit;
+        System.out.println("Blockmatrix init: " + bmInit);
 
         start = System.nanoTime();
         BlockTensor bt = new BlockTensor(width * width);
-        System.out.println("Blocktensor init: " + (System.nanoTime() - start) / 1000000);
+        long btInit = (System.nanoTime() - start) / 1000000;
+        blocktensorTotal += btInit;
+        System.out.println("Blocktensor init: " + btInit);
 
         start = System.nanoTime();
         for (int i = 0; i < width * width - width; ++i) {
             bm.add(new Block(System.currentTimeMillis(), ("Block " + i).getBytes()));
         }
-        System.out.println("Blockmatrix: " + (System.nanoTime() - start) / 1000000);
+        long bmAddition = (System.nanoTime() - start) / 1000000;
+        blockmatrixTotal += bmAddition;
+        System.out.println("Blockmatrix: " + bmAddition);
 
         start = System.nanoTime();
         for (int i = 0; i < width * width - width; ++i) {
             bt.add(("Block " + i).getBytes());
         }
-        System.out.println("Blocktensor: " + (System.nanoTime() - start) / 1000000);
+        long btAddition = (System.nanoTime() - start) / 1000000;
+        blocktensorTotal += btAddition;
+        System.out.println("Blocktensor: " + btAddition);
+
+        System.out.println();
+        System.out.println("Blocktensor TOTAL: " + blocktensorTotal);
+        System.out.println("Blockmatrix TOTAL: " + blockmatrixTotal);
 
         /*
-        1000000 additions
+        1,000,000 additions
         Blockmatrix init: 346 ms
         Blocktensor init: 20839 ms
         Blockmatrix: 312743 ms

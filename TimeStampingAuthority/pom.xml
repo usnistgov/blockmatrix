@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>gov.nist.timestampingauthority</groupId>
+    <artifactId>Root</artifactId>
+    <version>0.0.1</version>
+    <packaging>pom</packaging>
+    <name>Root of TsA Project</name>
+
+    <modules>
+        <module>Client</module>
+        <module>OrderChecker</module>
+        <module>TimeStampingAuthorityServer</module>
+        <module>FileCombiner</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>12</maven.compiler.source>
+        <maven.compiler.target>12</maven.compiler.target>
+
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
+                <executions>
+                    <execution>
+                        <id>move-jars-to-testing</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <tasks>
+                                <!-- As new modules appear, add them here for the jars to be automatically copied to testing directory -->
+                                <copy
+                                        file="${basedir}/TimeStampingAuthorityServer/target/TimeStampingAuthorityServer-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/testing/TimeStampingAuthorityServer.jar"
+                                />
+                                <copy
+                                        file="${basedir}/OrderChecker/target/OrderChecker-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/testing/OrderChecker.jar"
+                                />
+                                <copy
+                                        file="${basedir}/Client/target/Client-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/testing/Client.jar"
+                                />
+                                <copy
+                                        file="${basedir}/FileCombiner/target/FileCombiner-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/testing/FileCombiner.jar"
+                                />
+
+                                <copy
+                                        file="${basedir}/TimeStampingAuthorityServer/target/TimeStampingAuthorityServer-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/out/TimeStampingAuthorityServer-exe.jar"
+                                />
+                                <!-- Copy library package into out directory -->
+                                <copy
+                                        file="${basedir}/TimeStampingAuthorityServer/target/TimeStampingAuthorityServer-${project.version}-lib.jar"
+                                        tofile="${basedir}/out/TimeStampingAuthorityServer-lib.jar"
+                                />
+                                <copy
+                                        file="${basedir}/OrderChecker/target/OrderChecker-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/out/OrderChecker-exe.jar"
+                                />
+                                <copy
+                                        file="${basedir}/Client/target/Client-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/out/Client-exe.jar"
+                                />
+                                <copy
+                                        file="${basedir}/FileCombiner/target/FileCombiner-${project.version}-jar-with-dependencies.jar"
+                                        tofile="${basedir}/out/FileCombiner-exe.jar"
+                                />
+                            </tasks>
+                        </configuration>
+                    </execution>
+                </executions>
+
+                <inherited>false</inherited>
+            </plugin>
+        </plugins>
+    </build>
+</project>
